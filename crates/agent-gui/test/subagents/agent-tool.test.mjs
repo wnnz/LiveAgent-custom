@@ -15,6 +15,17 @@ function contextMessageText(message) {
     .join("");
 }
 
+test("Agent tool routes templates by final deliverable and reserves readonly for inspection", async () => {
+  const harness = await createSubagentHarness();
+  const description = harness.bundle.tools.find((tool) => tool.name === "Agent")?.description ?? "";
+
+  assert.match(description, /requested final deliverable, not by task complexity/);
+  assert.match(description, /Backend code, APIs, persistence, transactions, or migrations/);
+  assert.match(description, /architecture\/design template only when.*no code implementation/is);
+  assert.match(description, /edit files, compile, or run implementation tests need mode=worktree/);
+  assert.match(description, /task prompt cannot override a wrongly bound template/);
+});
+
 test("readonly happy path: identity prompts, filtered child tools, SendMessage attached", async () => {
   const harness = await createSubagentHarness();
   const result = await harness.bundle.executeToolCall(

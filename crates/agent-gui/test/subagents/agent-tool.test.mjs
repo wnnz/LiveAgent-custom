@@ -708,7 +708,7 @@ test("per-agent cards stream through the execution context with stable synthetic
   assert.equal(result.details.mode, "mixed");
 
   assert.deepEqual(
-    recording.emittedToolCalls.map((toolCall) => toolCall.id).sort(),
+    [...new Set(recording.emittedToolCalls.map((toolCall) => toolCall.id))].sort(),
     ["call-agent:agent:1", "call-agent:agent:2"],
   );
   for (const toolCall of recording.emittedToolCalls) {
@@ -724,8 +724,71 @@ test("per-agent cards stream through the execution context with stable synthetic
     assert.equal(toolResult.details.kind, "subagent_card");
     assert.equal(toolResult.details.parentToolCallId, "call-agent");
     assert.equal(toolResult.details.agent.status, "completed");
+    assert.ok(toolResult.details.agent.progress.entries.length > 0);
+    assert.deepEqual(toolCall.arguments.progress, toolResult.details.agent.progress);
     assert.equal(toolResult.isError, false);
   }
+});
+
+test("per-agent cards stream bounded model text and child tool progress", async () => {
+  const childToolCall = {
+    type: "toolCall",
+    id: "child-read",
+    name: "Read",
+    arguments: { path: "src/app.ts" },
+  };
+  const harness = await createSubagentHarness({
+    runner: async (params) => {
+      params.onTurnStart?.(1);
+      params.onTextDelta?.("Inspecting ", 1);
+      params.onTextDelta?.("the implementation", 1);
+      params.onToolExecutionStart?.(childToolCall, 1);
+      params.onToolResult?.(
+        childToolCall,
+        {
+          role: "toolResult",
+          toolCallId: childToolCall.id,
+          toolName: "Read",
+          content: [],
+          isError: false,
+        },
+        1,
+      );
+      params.onAssistantMessage?.({ role: "assistant" }, 1);
+      const assistant = {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+        api: "openai-responses",
+        provider: "openai",
+        model: "gpt-5",
+        stopReason: "stop",
+        timestamp: Date.now(),
+      };
+      return { assistant, messages: [assistant], emittedMessages: [assistant] };
+    },
+  });
+  const parentToolCall = createAgentToolCall({ agents: [{ id: "alpha", prompt: "inspect" }] });
+  const recording = createRecordingContext(parentToolCall);
+  const result = await harness.bundle.executeToolCall(parentToolCall, undefined, recording.context);
+  const progress = result.details.agents[0].progress;
+
+  assert.equal(progress.round, 1);
+  assert.equal(progress.toolCalls, 1);
+  assert.ok(
+    progress.entries.some(
+      (entry) => entry.kind === "assistant" && entry.text === "Inspecting the implementation",
+    ),
+  );
+  assert.ok(
+    progress.entries.some(
+      (entry) =>
+        entry.kind === "tool" &&
+        entry.toolName === "Read" &&
+        entry.summary === "src/app.ts" &&
+        entry.status === "completed",
+    ),
+  );
+  assert.ok(recording.emittedToolCalls.some((call) => call.arguments.progress?.toolCalls === 1));
 });
 
 test("batch result is an error when any agent did not complete", async () => {

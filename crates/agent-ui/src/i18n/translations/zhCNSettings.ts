@@ -773,6 +773,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.agentsRoleEnabledHint": "启用后，父 AI 可以按名称和描述自动选择此角色。",
   "settings.agentsRoleModel": "角色模型",
   "settings.agentsRoleFollowParent": "跟随父对话模型",
+  "settings.agentsRoleFollowParentReasoning": "跟随父对话",
   "settings.agentsRoleThinking": "启用 Thinking",
   "settings.agentsRoleReasoning": "推理档位",
   "settings.agentsRoleLimit": "最多只能同时启用 12 个子代理角色",

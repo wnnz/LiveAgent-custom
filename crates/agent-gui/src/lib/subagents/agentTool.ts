@@ -390,17 +390,24 @@ export function createSubagentTools(params: {
             template: resolved.template,
             now: Date.now(),
           });
-        const cardToolCall = buildSubagentCardToolCall({
+        let cardToolCall = buildSubagentCardToolCall({
           parentToolCallId: toolCall.id,
           spec: resolved.spec,
           identity: identityPreview,
           index,
           total: agents.length,
           concurrency,
+          template: resolved.template,
         });
         context?.emitToolCall?.(cardToolCall);
         context?.emitToolExecutionStart?.(cardToolCall);
         const finish = (report: SubagentReportDetails) => {
+          if (report.progress) {
+            cardToolCall = {
+              ...cardToolCall,
+              arguments: { ...cardToolCall.arguments, progress: report.progress },
+            };
+          }
           context?.emitToolResult?.(
             cardToolCall,
             buildSubagentCardResult({
@@ -416,10 +423,20 @@ export function createSubagentTools(params: {
         };
 
         try {
+          const runEnv: SubagentRunEnvironment = {
+            ...env,
+            onProgress: (progress) => {
+              cardToolCall = {
+                ...cardToolCall,
+                arguments: { ...cardToolCall.arguments, progress },
+              };
+              context?.emitToolCall?.(cardToolCall);
+            },
+          };
           const report = await enqueueAgentRun(resolved.spec.id, () =>
             scheduler.runSubagent(
               () =>
-                executeSubagentRun(env, {
+                executeSubagentRun(runEnv, {
                   spec: resolved.spec,
                   existingIdentity: resolved.existingIdentity,
                   template: resolved.template,
@@ -444,6 +461,7 @@ export function createSubagentTools(params: {
             role: identityPreview.role,
             prompt: resolved.spec.prompt,
             templateId: resolved.spec.templateId,
+            templateName: resolved.template?.name,
             mode: resolved.spec.mode,
             status: cancelled ? "cancelled" : "failed",
             summary: "",

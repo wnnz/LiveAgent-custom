@@ -812,6 +812,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "When enabled, the parent AI can select this role by its name and description.",
   "settings.agentsRoleModel": "Role model",
   "settings.agentsRoleFollowParent": "Follow parent conversation model",
+  "settings.agentsRoleFollowParentReasoning": "Follow parent conversation",
   "settings.agentsRoleThinking": "Enable Thinking",
   "settings.agentsRoleReasoning": "Reasoning level",
   "settings.agentsRoleLimit": "At most 12 subagent roles can be enabled",

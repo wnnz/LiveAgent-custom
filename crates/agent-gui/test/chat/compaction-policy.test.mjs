@@ -82,12 +82,22 @@ test("decideCompaction covers every reason", () => {
   assert.equal(decide({ totalTokens: 10_000 }).reason, "below-threshold");
 
   const cooldown = decide({
-    totalTokens: 199_000,
+    totalTokens: 160_000,
     lastCompactionAt: NOW - 30_000,
     userMessageCount: 1,
   });
   assert.equal(cooldown.reason, "cooldown");
   assert.equal(cooldown.shouldCompact, false);
+
+  // Even during cooldown, approaching the hard input ceiling must compact.
+  // This prevents input + max_output from being rejected by the provider.
+  const hardLimit = decide({
+    totalTokens: 167_000,
+    lastCompactionAt: NOW - 30_000,
+    userMessageCount: 1,
+  });
+  assert.equal(hardLimit.reason, "threshold-exceeded");
+  assert.equal(hardLimit.shouldCompact, true);
 
   // 冷却窗内但用户消息已足量 → 允许压缩（防超大单轮卡死）。
   assert.equal(

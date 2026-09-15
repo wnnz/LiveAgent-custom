@@ -48,6 +48,39 @@ test("role runtime selects its configured provider, model, and reasoning", () =>
   assert.equal(resolved.fallbackReason, undefined);
 });
 
+test("role runtime inherits parent reasoning when the role leaves it unset", () => {
+  const parentProvider = provider("parent", "codex", "gpt-parent");
+  const roleProvider = provider("review", "codex", "gpt-review");
+  const controls = {
+    ...settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
+    reasoning: "low",
+    reasoningByProvider: {
+      ...settings.DEFAULT_CHAT_RUNTIME_CONTROLS.reasoningByProvider,
+      codex_openai_responses: "low",
+    },
+  };
+  const resolved = roles.resolveSubagentRoleRuntime({
+    template: {
+      id: "reviewer",
+      name: "Reviewer",
+      description: "Review code",
+      prompt: "Find defects",
+      selectedModel: { customProviderId: "review", model: "gpt-review" },
+      thinkingEnabled: true,
+    },
+    providers: [parentProvider, roleProvider],
+    controls,
+    parentProvider,
+    parent: {
+      providerId: "codex",
+      model: "gpt-parent",
+      runtime: { baseUrl: "parent", apiKey: "parent-key", reasoning: "low" },
+    },
+  });
+
+  assert.equal(resolved.runtime.reasoning, "low");
+});
+
 test("stale role model falls back to the parent model visibly", () => {
   const parentProvider = provider("parent", "codex", "gpt-parent");
   const resolved = roles.resolveSubagentRoleRuntime({

@@ -1,5 +1,9 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import type { SubagentReportDetails } from "@liveagent/ui/lib/subagents/protocol";
+import type {
+  SubagentLiveProgress,
+  SubagentProgressEntry,
+  SubagentReportDetails,
+} from "@liveagent/ui/lib/subagents/protocol";
 import { CompactionController } from "../chat/compaction/controller";
 import {
   appendMessagesToConversation,
@@ -70,6 +74,8 @@ export type SubagentRunEnvironment = {
   /** 父对话检查点上下文;传给 worktree.apply 让后端在改写父工作区前捕获前像。 */
   checkpoint?: { conversationId: string; turnId: string };
   onStatus?: (status: string | null) => void;
+  /** Emits a small, bounded trace for the parent conversation's live card. */
+  onProgress?: (progress: SubagentLiveProgress) => void;
   modelFallbackReason?: string;
 };
 
@@ -172,6 +178,54 @@ export async function executeSubagentRun(
   let changedPaths: string[] | undefined;
   let childWorkdir = env.workdir;
 
+  const progressEntries: SubagentProgressEntry[] = [];
+  let lastProgressEmitAt = 0;
+  const progressSnapshot = (): SubagentLiveProgress => ({
+    round: rounds,
+    toolCalls,
+    entries: progressEntries.map((entry) => ({ ...entry })),
+  });
+  const emitProgress = (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastProgressEmitAt < 120) return;
+    lastProgressEmitAt = now;
+    env.onProgress?.(progressSnapshot());
+  };
+  const pushProgress = (entry: SubagentProgressEntry) => {
+    progressEntries.push(entry);
+    if (progressEntries.length > 14) progressEntries.splice(0, progressEntries.length - 14);
+    emitProgress(true);
+  };
+  const progressStatus = (text: string) => {
+    const normalized = text.trim();
+    if (!normalized) return;
+    pushProgress({ kind: "status", text: normalized, timestamp: Date.now() });
+  };
+  const toolSummary = (toolCall: ToolCall) => {
+    const args = toolCall.arguments ?? {};
+    for (const key of ["command", "path", "query", "url", "pattern", "description", "prompt"]) {
+      const value = args[key];
+      if (typeof value !== "string" || !value.trim()) continue;
+      const singleLine = value.trim().replace(/\s+/g, " ");
+      return singleLine.length > 180 ? `${singleLine.slice(0, 180)}…` : singleLine;
+    }
+    return undefined;
+  };
+  const updateToolProgress = (toolCall: ToolCall, status: "completed" | "failed") => {
+    for (let index = progressEntries.length - 1; index >= 0; index -= 1) {
+      const entry = progressEntries[index];
+      if (
+        entry?.kind === "tool" &&
+        entry.toolCallId === toolCall.id &&
+        entry.status === "running"
+      ) {
+        progressEntries[index] = { ...entry, status };
+        emitProgress(true);
+        return;
+      }
+    }
+  };
+
   const persistenceWarnings: string[] = [];
   const trackedPersists: Promise<void>[] = [];
   let lastPersistedMessageCount = -1;
@@ -245,6 +299,7 @@ export async function executeSubagentRun(
     role: identity.role,
     prompt: spec.prompt,
     templateId: spec.templateId,
+    templateName: template?.name,
     providerId: env.providerId,
     model: env.model,
     modelFallbackReason: env.modelFallbackReason,
@@ -285,6 +340,7 @@ export async function executeSubagentRun(
     worktreeBranchDeleted,
     candidateArtifacts,
     changedPaths,
+    progress: progressSnapshot(),
   });
 
   const renderBusSnapshot = async () => {
@@ -320,7 +376,9 @@ export async function executeSubagentRun(
   const settleWorktree = async (terminal: "completed" | "failed" | "cancelled") => {
     if (!worktree) return;
     const worktreeRoot = worktree.worktreeRoot;
-    env.onStatus?.(`Inspecting worktree changes for ${identity.name}…`);
+    const status = `Inspecting worktree changes for ${identity.name}…`;
+    env.onStatus?.(status);
+    progressStatus(status);
     await fetchWorktreeStatus();
 
     const agentSucceeded = terminal === "completed";
@@ -333,7 +391,9 @@ export async function executeSubagentRun(
         candidateArtifacts = applyDecision.candidateArtifacts;
       }
       if (worktreeStatus?.changed && applyDecision?.shouldApply) {
-        env.onStatus?.(`Applying worktree changes from ${identity.name}…`);
+        const status = `Applying worktree changes from ${identity.name}…`;
+        env.onStatus?.(status);
+        progressStatus(status);
         try {
           const applyResult = await env.enqueueWorktreeApply(() =>
             env.worktree.apply({
@@ -382,7 +442,9 @@ export async function executeSubagentRun(
       : { shouldCleanup: false, reason: applySkippedReason ?? "agent_failed" };
     worktreeCleanupReason = cleanupDecision.reason;
     if (cleanupDecision.shouldCleanup) {
-      env.onStatus?.(`Cleaning up worktree for ${identity.name}…`);
+      const status = `Cleaning up worktree for ${identity.name}…`;
+      env.onStatus?.(status);
+      progressStatus(status);
       try {
         const cleanupResult = await env.worktree.cleanup({
           worktreeRoot: worktree.worktreeRoot,
@@ -425,6 +487,7 @@ export async function executeSubagentRun(
   let lastView: ConversationViewState | undefined;
 
   try {
+    progressStatus(`Starting ${identity.name}…`);
     // ---- provision: tools / worktree ---------------------------------------
     let childTools: Tool[];
     let childExecute: ChildToolExecutor;
@@ -434,7 +497,9 @@ export async function executeSubagentRun(
           "worktree_unavailable: Agent mode=worktree is not available in this runtime.",
         );
       }
-      env.onStatus?.(`Creating isolated worktree for ${identity.name}…`);
+      const status = `Creating isolated worktree for ${identity.name}…`;
+      env.onStatus?.(status);
+      progressStatus(status);
       worktree = await env.worktree.create({
         workdir: env.workdir,
         label: buildWorktreeLabel({
@@ -596,10 +661,37 @@ export async function executeSubagentRun(
       },
       onTurnStart: (round) => {
         rounds = Math.max(rounds, round);
+        progressStatus(`Round ${round}: working…`);
       },
-      onTextDelta: () => {},
-      onToolExecutionStart: () => {
+      onTextDelta: (delta) => {
+        const last = progressEntries.at(-1);
+        if (last?.kind === "assistant") {
+          const nextText = `${last.text}${delta}`;
+          last.text = nextText.length > 2400 ? `…${nextText.slice(-2399)}` : nextText;
+        } else {
+          progressEntries.push({ kind: "assistant", text: delta, timestamp: Date.now() });
+        }
+        emitProgress();
+      },
+      onToolExecutionStart: (toolCall) => {
         toolCalls += 1;
+        pushProgress({
+          kind: "tool",
+          toolCallId: toolCall.id,
+          toolName: toolCall.name,
+          summary: toolSummary(toolCall),
+          status: "running",
+          timestamp: Date.now(),
+        });
+      },
+      onToolResult: (toolCall, toolResult) => {
+        updateToolProgress(
+          toolCall,
+          toolResult.role === "toolResult" && toolResult.isError ? "failed" : "completed",
+        );
+      },
+      onAssistantMessage: () => {
+        emitProgress(true);
       },
       onBeforeNextTurn: async ({ emittedMessages }) => {
         const view = appendMessagesToConversation(baseState, emittedMessages);

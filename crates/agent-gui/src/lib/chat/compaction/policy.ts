@@ -6,6 +6,9 @@ export const PROTECTION_THRESHOLD_FACTOR = 1.2;
 export const MIN_COMPACTION_INTERVAL_MS = 60_000;
 export const MIN_COMPACTION_USER_MESSAGES = 3;
 export const RECENT_COMPACTION_WINDOW_MS = 5 * 60_000;
+// Token estimates and provider-side counting can differ slightly. Never let the
+// cooldown carry a request all the way to the advertised input ceiling.
+export const HARD_CONTEXT_SAFETY_MARGIN_TOKENS = 1024;
 // 压缩后仍高于阈值的 90% 视为"低效压缩"，推动压力升级。
 export const INEFFECTIVE_COMPACTION_RATIO = 0.9;
 export const MAX_PRESSURE_LEVEL = 2;
@@ -172,7 +175,9 @@ export function decideCompaction(params: {
     !params.bypassThresholdAndCooldown &&
     params.lastCompactionAt > 0 &&
     params.now - params.lastCompactionAt < MIN_COMPACTION_INTERVAL_MS &&
-    params.userMessageCount < MIN_COMPACTION_USER_MESSAGES
+    params.userMessageCount < MIN_COMPACTION_USER_MESSAGES &&
+    base.totalTokens <
+      Math.max(1024, contextWindow - maxOutputToken - HARD_CONTEXT_SAFETY_MARGIN_TOKENS)
   ) {
     return { ...base, shouldCompact: false, reason: "cooldown", threshold };
   }

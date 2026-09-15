@@ -218,8 +218,12 @@ function buildSubagentCardToolCallFromReport(params: {
       id: params.agent.id,
       name: params.agent.name,
       role: params.agent.role,
+      template: params.agent.templateName
+        ? `${params.agent.templateName}${params.agent.templateId ? ` (${params.agent.templateId})` : ""}`
+        : params.agent.templateId,
       prompt: params.agent.prompt,
       mode: params.agent.mode,
+      progress: params.agent.progress,
     },
   };
 }

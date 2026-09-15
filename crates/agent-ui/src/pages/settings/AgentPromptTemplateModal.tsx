@@ -53,7 +53,7 @@ export function AgentPromptTemplateModal({
   const [subagentEnabled, setSubagentEnabled] = useState(initialData?.subagentEnabled ?? false);
   const [selectedModel, setSelectedModel] = useState(initialData?.selectedModel);
   const [thinkingEnabled, setThinkingEnabled] = useState(initialData?.thinkingEnabled ?? true);
-  const [reasoning, setReasoning] = useState<ReasoningLevel>(initialData?.reasoning ?? "medium");
+  const [reasoning, setReasoning] = useState<ReasoningLevel | undefined>(initialData?.reasoning);
   const isEditing = Boolean(initialData);
   const availableModelOptions = buildModelOptions({ customProviders: providers }).map((option) => ({
     ...option,
@@ -96,9 +96,9 @@ export function AgentPromptTemplateModal({
       description: description.trim(),
       prompt: trimmedPrompt,
       subagentEnabled,
-      ...(selectedModel ? { selectedModel } : {}),
-      thinkingEnabled,
-      reasoning,
+      selectedModel: selectedModel ?? undefined,
+      thinkingEnabled: selectedModel ? thinkingEnabled : undefined,
+      reasoning: selectedModel && thinkingEnabled ? reasoning : undefined,
     });
     onClose();
   }
@@ -187,45 +187,57 @@ export function AgentPromptTemplateModal({
                   <ModelPicker
                     options={modelOptions}
                     value={selectedModelValue}
-                    onChange={(value) =>
-                      setSelectedModel(value ? (parseModelValue(value) ?? undefined) : undefined)
-                    }
+                    onChange={(value) => {
+                      const next = value ? (parseModelValue(value) ?? undefined) : undefined;
+                      setSelectedModel(next);
+                      if (next && !reasoning) {
+                        setReasoning("medium");
+                      }
+                    }}
                     placeholder={t("settings.agentsRoleFollowParent")}
                     noneLabel={t("settings.agentsRoleFollowParent")}
                   />
                 </div>
 
-                <div className="flex items-center justify-between gap-3">
-                  <Label className="text-xs font-semibold">
-                    {t("settings.agentsRoleThinking")}
-                  </Label>
-                  <Switch
-                    checked={thinkingEnabled}
-                    onCheckedChange={(checked) => setThinkingEnabled(checked === true)}
-                  />
-                </div>
+                {selectedModel ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label className="text-xs font-semibold">
+                        {t("settings.agentsRoleThinking")}
+                      </Label>
+                      <Switch
+                        checked={thinkingEnabled}
+                        onCheckedChange={(checked) => setThinkingEnabled(checked === true)}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold">
-                    {t("settings.agentsRoleReasoning")}
-                  </Label>
-                  <Select
-                    value={reasoning}
-                    disabled={!thinkingEnabled || reasoningLevels.length === 0}
-                    onValueChange={(value) => setReasoning(value as ReasoningLevel)}
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue>{reasoning}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {reasoningLevels.map((level) => (
-                        <SelectItem key={level} value={level}>
-                          {level}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">
+                        {t("settings.agentsRoleReasoning")}
+                      </Label>
+                      <Select
+                        value={
+                          reasoning && (reasoningLevels as readonly string[]).includes(reasoning)
+                            ? reasoning
+                            : (reasoningLevels[0] ?? "medium")
+                        }
+                        disabled={!thinkingEnabled || reasoningLevels.length === 0}
+                        onValueChange={(value) => setReasoning(value as ReasoningLevel)}
+                      >
+                        <SelectTrigger className="h-10">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {reasoningLevels.map((level) => (
+                            <SelectItem key={level} value={level}>
+                              {level}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                ) : null}
               </div>
             </section>
 

@@ -9,6 +9,33 @@ export type SubagentProtocolMode = "readonly" | "worktree";
 export type SubagentProtocolStatus = "completed" | "failed" | "cancelled";
 export type SubagentProtocolChannel = "direct" | "shared" | "decision" | "question";
 
+export type SubagentProgressEntry =
+  | {
+      kind: "status";
+      text: string;
+      timestamp: number;
+    }
+  | {
+      kind: "assistant";
+      text: string;
+      timestamp: number;
+    }
+  | {
+      kind: "tool";
+      toolCallId: string;
+      toolName: string;
+      summary?: string;
+      status: "running" | "completed" | "failed";
+      timestamp: number;
+    };
+
+/** Bounded, display-safe live trace carried by the synthetic per-agent card. */
+export type SubagentLiveProgress = {
+  round: number;
+  toolCalls: number;
+  entries: SubagentProgressEntry[];
+};
+
 /** Final per-agent report embedded in cards and batch results. */
 export type SubagentReportDetails = {
   id: string;
@@ -17,6 +44,7 @@ export type SubagentReportDetails = {
   role?: string;
   prompt: string;
   templateId?: string;
+  templateName?: string;
   providerId?: string;
   model?: string;
   modelFallbackReason?: string;
@@ -57,6 +85,7 @@ export type SubagentReportDetails = {
   worktreeBranchDeleted?: boolean;
   candidateArtifacts?: string[];
   changedPaths?: string[];
+  progress?: SubagentLiveProgress;
 };
 
 export type SubagentBatchIssue = {
@@ -135,8 +164,10 @@ export type SubagentCardArguments = {
   id: string;
   name?: string;
   role?: string;
+  template?: string;
   mode?: SubagentProtocolMode;
   prompt?: string;
+  progress?: SubagentLiveProgress;
 };
 
 export function buildSubagentCardToolCallId(parentToolCallId: string, displayIndex: number) {

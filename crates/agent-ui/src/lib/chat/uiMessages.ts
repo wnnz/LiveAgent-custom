@@ -1065,6 +1065,7 @@ export function buildSubagentPlaceholderToolCalls(parentToolCall: ToolCall): Too
         id,
         name: optionalText(record.name),
         role: optionalText(record.role),
+        template: optionalText(record.template),
         mode: record.mode === "worktree" || record.mode === "readonly" ? record.mode : undefined,
         prompt,
       },
@@ -1099,8 +1100,12 @@ function buildSubagentCardToolCallFromReport(params: {
       id: params.agent.id,
       name: params.agent.name,
       role: params.agent.role,
+      template: params.agent.templateName
+        ? `${params.agent.templateName}${params.agent.templateId ? ` (${params.agent.templateId})` : ""}`
+        : params.agent.templateId,
       prompt: params.agent.prompt,
       mode: params.agent.mode,
+      progress: params.agent.progress,
     },
   };
 }

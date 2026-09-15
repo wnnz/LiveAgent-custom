@@ -93,8 +93,8 @@ function createToolArgsRenderer() {
         getSubagentTask() {
           return "";
         },
-        isSubagentCardToolCall() {
-          return false;
+        isSubagentCardToolCall(toolCall) {
+          return toolCall?.name === "Agent" && toolCall.arguments?.subagent_card === true;
         },
         shouldShowSubagentApplyStatus() {
           return false;
@@ -330,6 +330,42 @@ test("isDynamicMcpToolName classifies dynamic MCP tool names", () => {
   assert.equal(uiMessages.isDynamicMcpToolName(" mcp_fs_read"), true);
   assert.equal(uiMessages.isDynamicMcpToolName("McpManager"), false);
   assert.equal(uiMessages.isDynamicMcpToolName("Bash"), false);
+});
+
+test("running subagent cards render their live model and tool progress", () => {
+  const renderToolArgs = createToolArgsRenderer();
+  const html = renderToolArgs({
+    type: "toolCall",
+    id: "parent:agent:1",
+    name: "Agent",
+    arguments: {
+      subagent_card: true,
+      id: "reviewer",
+      name: "Reviewer",
+      prompt: "Inspect the implementation",
+      progress: {
+        round: 2,
+        toolCalls: 1,
+        entries: [
+          { kind: "assistant", text: "Tracing the call path", timestamp: 1 },
+          {
+            kind: "tool",
+            toolCallId: "child-read",
+            toolName: "Read",
+            summary: "src/app.ts",
+            status: "running",
+            timestamp: 2,
+          },
+        ],
+      },
+    },
+  });
+
+  assert.match(html, /progress/);
+  assert.match(html, /round 2 · 1 tools/);
+  assert.match(html, /Tracing the call path/);
+  assert.match(html, /Read/);
+  assert.match(html, /src\/app\.ts/);
 });
 
 test("display args keep long values intact and strip synthetic keys", () => {

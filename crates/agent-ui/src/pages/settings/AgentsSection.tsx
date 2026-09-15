@@ -63,9 +63,16 @@ export function AgentsSection(props: SettingsSectionProps) {
       if (editingTemplate) {
         return updateAgents(
           prev,
-          prev.agents.map((template) =>
-            template.id === editingTemplate.id ? { ...template, ...data } : template,
-          ),
+          prev.agents.map((template) => {
+            if (template.id !== editingTemplate.id) return template;
+            const updated: AgentPromptTemplate = { ...template, ...data };
+            if (!data.selectedModel) {
+              delete updated.selectedModel;
+              delete updated.thinkingEnabled;
+              delete updated.reasoning;
+            }
+            return updated;
+          }),
         );
       }
 
@@ -74,6 +81,11 @@ export function AgentsSection(props: SettingsSectionProps) {
         ...data,
         enabled: false,
       };
+      if (!data.selectedModel) {
+        delete newTemplate.selectedModel;
+        delete newTemplate.thinkingEnabled;
+        delete newTemplate.reasoning;
+      }
       return updateAgents(prev, [...prev.agents, newTemplate]);
     });
   }

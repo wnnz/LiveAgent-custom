@@ -38,8 +38,10 @@ import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
   SubagentBatchDetails,
   SubagentCardDetails,
+  SubagentLiveProgress,
   SubagentMessageDetails,
 } from "@liveagent/ui/lib/subagents/protocol";
+import { useEffect, useRef } from "react";
 import { Search } from "../../IconSet";
 import {
   displayString,
@@ -125,6 +127,90 @@ function buildPagedResultTags(params: {
 // Longest string that still reads well inside a fact-grid cell (~3 wrapped
 // lines); longer values switch the whole display to the complete JSON view.
 const GENERIC_GRID_VALUE_MAX_CHARS = 200;
+
+function readSubagentProgress(value: unknown): SubagentLiveProgress | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.entries)) return null;
+  const entries = record.entries.filter((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const item = entry as Record<string, unknown>;
+    if (item.kind === "status" || item.kind === "assistant") return typeof item.text === "string";
+    return (
+      item.kind === "tool" &&
+      typeof item.toolCallId === "string" &&
+      typeof item.toolName === "string"
+    );
+  }) as SubagentLiveProgress["entries"];
+  return {
+    round: typeof record.round === "number" ? record.round : 0,
+    toolCalls: typeof record.toolCalls === "number" ? record.toolCalls : 0,
+    entries,
+  };
+}
+
+function SubagentProgressDisplay({ progress }: { progress: SubagentLiveProgress | null }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!progress) return;
+    const element = scrollRef.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [progress]);
+  if (!progress || progress.entries.length === 0) return null;
+  return (
+    <ToolSurface className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <ToolSurfaceLabel label="progress" />
+        <span className="text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground/60">
+          {progress.round > 0 ? `round ${progress.round}` : "starting"}
+          {progress.toolCalls > 0 ? ` · ${progress.toolCalls} tools` : ""}
+        </span>
+      </div>
+      <div ref={scrollRef} className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+        {progress.entries.map((entry) => (
+          <div
+            key={`${entry.timestamp}-${entry.kind}-${
+              entry.kind === "tool"
+                ? `${entry.toolCallId}-${entry.status}`
+                : entry.text.slice(0, 48)
+            }`}
+            className="flex min-w-0 items-start gap-2 text-[calc(11px*var(--zone-font-scale,1))] leading-[1.55]"
+          >
+            <span
+              className={cn(
+                "mt-[0.55em] h-1.5 w-1.5 shrink-0 rounded-full",
+                entry.kind === "tool" && entry.status === "failed"
+                  ? "bg-red-500/80"
+                  : entry.kind === "tool" && entry.status === "running"
+                    ? "animate-pulse bg-blue-500/80"
+                    : entry.kind === "assistant"
+                      ? "bg-violet-500/70"
+                      : "bg-foreground/30",
+              )}
+            />
+            {entry.kind === "tool" ? (
+              <div className="min-w-0 break-words text-foreground/75">
+                <span className="font-medium text-foreground/88">{entry.toolName}</span>
+                {entry.summary ? (
+                  <span className="ml-1.5 font-mono text-foreground/55">{entry.summary}</span>
+                ) : null}
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "min-w-0 whitespace-pre-wrap break-words",
+                  entry.kind === "assistant" ? "text-foreground/78" : "text-foreground/58",
+                )}
+              >
+                {entry.text}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </ToolSurface>
+  );
+}
 
 /** Extract tool-specific display info */
 function getToolDisplay(toolCall: ToolTraceItem["toolCall"]) {
@@ -275,7 +361,9 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
     const args = toolCall.arguments || {};
     const name = displayString(args.name) || displayString(args.id);
     const role = displayString(args.role);
+    const template = displayString(args.template) || displayString(args.templateId);
     const task = displayString(args.prompt);
+    const progress = readSubagentProgress(args.progress);
 
     return (
       <div className="tool-expand flex flex-col gap-2">
@@ -295,6 +383,14 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             </div>
           </ToolSurface>
         ) : null}
+        {template ? (
+          <ToolSurface>
+            <ToolSurfaceLabel label="template" />
+            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.55] text-foreground/78">
+              {template}
+            </div>
+          </ToolSurface>
+        ) : null}
         {task ? (
           <ToolSurface>
             <ToolSurfaceLabel label="task" />
@@ -303,6 +399,7 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             </div>
           </ToolSurface>
         ) : null}
+        <SubagentProgressDisplay progress={progress} />
       </div>
     );
   }
@@ -1006,12 +1103,18 @@ export function ToolResultDisplay({
     const agent = details.agent;
     const agentDisplayName = agent.name || agent.id;
     const agentTask = getSubagentTask(agent);
+    const progress =
+      readSubagentProgress(agent.progress) ??
+      readSubagentProgress(item.toolCall.arguments?.progress);
     const tags: MetaTag[] = [
       { label: "agent", value: `${details.index + 1}/${details.total}` },
       { label: "status", value: agent.status },
     ];
     if (agent.mode === "worktree") {
       tags.push({ label: "mode", value: agent.mode });
+    }
+    if (agent.templateName || agent.templateId) {
+      tags.push({ label: "template", value: agent.templateName || agent.templateId || "" });
     }
     if (agent.model) {
       tags.push({ label: "model", value: agent.model });
@@ -1044,6 +1147,16 @@ export function ToolResultDisplay({
               <span className="text-muted-foreground">role</span> {agent.role}
             </div>
           ) : null}
+          {agent.templateName || agent.templateId ? (
+            <div className="text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-[1.55] text-foreground/78">
+              <span className="text-muted-foreground">template</span>{" "}
+              {agent.templateName
+                ? agent.templateId
+                  ? `${agent.templateName} (${agent.templateId})`
+                  : agent.templateName
+                : agent.templateId}
+            </div>
+          ) : null}
           {agent.modelFallbackReason ? (
             <CodePreview text={agent.modelFallbackReason} maxChars={600} />
           ) : null}
@@ -1052,6 +1165,7 @@ export function ToolResultDisplay({
               <span className="text-muted-foreground">task</span> {agentTask}
             </div>
           ) : null}
+          <SubagentProgressDisplay progress={progress} />
           {shouldShowSubagentWorktreeLocation(agent) ? (
             <div className="break-all text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground/70">
               {agent.branchName ? `${agent.branchName} | ` : ""}

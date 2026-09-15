@@ -164,12 +164,15 @@ function ToolCallItem({
   // 工具审批由宿主适配器读取。审批发生在工具执行前，不能用 isRunning 作门。
   const pendingApproval = usePendingToolApproval(item.toolCall.id, item.toolCall.arguments);
   const isApprovalPending = !readOnly && !isRedactedToolContent && !result && pendingApproval;
+  const isSubagentCard = isSubagentCardToolCall(item.toolCall);
   const shouldAutoOpen =
     !isRedactedToolContent &&
-    (item.toolCall.name === "Image" || builtinResultKind === "display_image" || shouldKeepAskOpen);
+    (item.toolCall.name === "Image" ||
+      builtinResultKind === "display_image" ||
+      shouldKeepAskOpen ||
+      (isSubagentCard && Boolean(isRunning)));
   const [open, setOpen] = useState(readOnly || isRedactedToolContent ? false : shouldAutoOpen);
   const userInteractedRef = useRef(false);
-  const isSubagentCard = isSubagentCardToolCall(item.toolCall);
   const hasArgs = Object.keys(item.toolCall.arguments || {}).length > 0;
   const isStreamingFilePreviewTool = FILE_TOOL_TEXT_FIELDS[item.toolCall.name] !== undefined;
   const shouldShowArgs =

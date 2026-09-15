@@ -7,7 +7,7 @@ import {
   type SubagentCardDetails,
   type SubagentReportDetails,
 } from "@liveagent/ui/lib/subagents/protocol";
-import { AGENT_TOOL_NAME, type SubagentIdentity, type SubagentSpec } from "./types";
+import { AGENT_TOOL_NAME, type SubagentIdentity, type SubagentSpec, type SubagentTemplate } from "./types";
 
 /**
  * Synthetic per-agent tool call emitted when a subagent starts executing.
@@ -21,7 +21,14 @@ export function buildSubagentCardToolCall(params: {
   index: number;
   total: number;
   concurrency: number;
+  template?: SubagentTemplate;
 }): ToolCall {
+  const templateName = params.template?.name?.trim();
+  const templateId = params.spec.templateId || params.identity.templateId || params.template?.id;
+  const templateDisplay = templateName
+    ? (templateId ? `${templateName} (${templateId})` : templateName)
+    : templateId;
+
   const cardArguments: SubagentCardArguments = {
     subagent_card: true,
     parent_tool_call_id: params.parentToolCallId,
@@ -31,6 +38,7 @@ export function buildSubagentCardToolCall(params: {
     id: params.spec.id,
     name: params.identity.name,
     role: params.identity.role,
+    template: templateDisplay,
     mode: params.spec.mode,
     prompt: params.spec.prompt,
   };

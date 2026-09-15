@@ -483,8 +483,19 @@ export type AgentPromptTemplate = {
   name: string;
   description: string;
   prompt: string;
+  /** The one template injected into parent conversations as the global prompt. */
   enabled: boolean;
+  /** Independently exposes this template as a selectable delegated-agent role. */
+  subagentEnabled: boolean;
+  /** Omitted means the delegated agent follows the parent conversation model. */
+  selectedModel?: SelectedModel;
+  /** Omitted means the delegated agent follows the parent thinking toggle. */
+  thinkingEnabled?: boolean;
+  /** Omitted means the delegated agent follows the parent reasoning level. */
+  reasoning?: ReasoningLevel;
 };
+
+export const MAX_SUBAGENT_ROLES = 12;
 
 export type SshAuthType = "password" | "privateKey" | "keyboardInteractive";
 

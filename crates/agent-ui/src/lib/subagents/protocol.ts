@@ -17,6 +17,9 @@ export type SubagentReportDetails = {
   role?: string;
   prompt: string;
   templateId?: string;
+  providerId?: string;
+  model?: string;
+  modelFallbackReason?: string;
   mode: SubagentProtocolMode;
   applyPolicy?: "none" | "explicit" | "auto";
   allowedOutputPaths?: string[];
@@ -75,6 +78,7 @@ export type SubagentTemplateEntry = {
   id: string;
   name: string;
   description?: string;
+  model?: string;
 };
 
 /** Aggregate result of one Agent tool call. */

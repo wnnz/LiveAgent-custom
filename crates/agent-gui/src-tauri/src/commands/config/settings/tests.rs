@@ -1128,14 +1128,19 @@ mod tests {
                     "name": "代码审查",
                     "description": "用于审查 PR 和补测试缺口",
                     "prompt": "你是一个严格的代码审查助手。",
-                    "enabled": true
+                    "enabled": true,
+                    "subagentEnabled": true,
+                    "selectedModel": { "customProviderId": "codex-main", "model": "gpt-5.6" },
+                    "thinkingEnabled": true,
+                    "reasoning": "high"
                 },
                 {
                     "id": "planner",
                     "name": "任务规划",
                     "description": "",
                     "prompt": "先拆任务，再执行。",
-                    "enabled": false
+                    "enabled": false,
+                    "subagentEnabled": true
                 }
             ]),
         )
@@ -1153,10 +1158,16 @@ mod tests {
                 |row| row.get::<_, i64>(0),
             )
             .expect("query reviewer enabled");
+        let role_count = conn
+            .query_row("SELECT COUNT(*) FROM subagent_role_profiles", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("count role profiles");
         let loaded = load_agents(&conn).expect("load agents");
 
         assert_eq!(row_count, 2);
         assert_eq!(stored_enabled, 1);
+        assert_eq!(role_count, 2);
         assert_eq!(
             loaded,
             Some(json!([
@@ -1165,16 +1176,74 @@ mod tests {
                     "name": "代码审查",
                     "description": "用于审查 PR 和补测试缺口",
                     "prompt": "你是一个严格的代码审查助手。",
-                    "enabled": true
+                    "enabled": true,
+                    "subagentEnabled": true,
+                    "selectedModel": { "customProviderId": "codex-main", "model": "gpt-5.6" },
+                    "thinkingEnabled": true,
+                    "reasoning": "high"
                 },
                 {
                     "id": "planner",
                     "name": "任务规划",
                     "description": "",
                     "prompt": "先拆任务，再执行。",
-                    "enabled": false
+                    "enabled": false,
+                    "subagentEnabled": true
                 }
             ]))
+        );
+
+        save_agents(
+            &mut conn,
+            json!([{
+                "id": "reviewer",
+                "name": "代码审查",
+                "description": "用于审查 PR 和补测试缺口",
+                "prompt": "你是一个严格的代码审查助手。",
+                "enabled": true,
+                "subagentEnabled": false
+            }]),
+        )
+        .expect("delete planner and its role profile");
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM agent_prompt_templates", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("count templates after deletion"),
+            1
+        );
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM subagent_role_profiles", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("count profiles after deletion"),
+            1
+        );
+
+        let too_many_roles = Value::Array(
+            (0..13)
+                .map(|index| {
+                    json!({
+                        "id": format!("role-{index}"),
+                        "name": format!("Role {index}"),
+                        "prompt": "prompt",
+                        "enabled": false,
+                        "subagentEnabled": true
+                    })
+                })
+                .collect(),
+        );
+        assert!(save_agents(&mut conn, too_many_roles).is_err());
+        assert_eq!(
+            load_agents(&conn).expect("load agents after rejected transaction"),
+            Some(json!([{
+                "id": "reviewer",
+                "name": "代码审查",
+                "description": "用于审查 PR 和补测试缺口",
+                "prompt": "你是一个严格的代码审查助手。",
+                "enabled": true,
+                "subagentEnabled": false
+            }]))
         );
     }
 
@@ -2547,7 +2616,16 @@ mod tests {
             mcp: Some(json!({ "servers": [{ "id": "s-1" }], "selected": ["s-1"] })),
             system: None,
             agents: Some(json!([
-                { "id": "t-1", "name": "T1", "prompt": "prompt", "enabled": true }
+                {
+                    "id": "t-1",
+                    "name": "T1",
+                    "prompt": "prompt",
+                    "enabled": true,
+                    "subagentEnabled": true,
+                    "selectedModel": { "customProviderId": "p-1", "model": "m-1" },
+                    "thinkingEnabled": true,
+                    "reasoning": "high"
+                }
             ])),
             model_failover: Some(json!({ "claude_code": { "queue": ["p-1"] } })),
             stt: Some(json!({
@@ -2575,6 +2653,10 @@ mod tests {
             .expect("load agents")
             .expect("agents present");
         assert_eq!(agents[0]["id"], json!("t-1"), "旧模板应被整域覆盖");
+        assert_eq!(agents[0]["subagentEnabled"], json!(true));
+        assert_eq!(agents[0]["selectedModel"]["model"], json!("m-1"));
+        assert_eq!(agents[0]["thinkingEnabled"], json!(true));
+        assert_eq!(agents[0]["reasoning"], json!("high"));
         assert_eq!(
             load_model_failover(&conn).expect("load model failover"),
             Some(json!({ "claude_code": { "queue": ["p-1"] } }))

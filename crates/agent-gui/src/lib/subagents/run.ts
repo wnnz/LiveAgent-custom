@@ -70,6 +70,7 @@ export type SubagentRunEnvironment = {
   /** 父对话检查点上下文;传给 worktree.apply 让后端在改写父工作区前捕获前像。 */
   checkpoint?: { conversationId: string; turnId: string };
   onStatus?: (status: string | null) => void;
+  modelFallbackReason?: string;
 };
 
 export type SubagentRunRequest = {
@@ -244,6 +245,9 @@ export async function executeSubagentRun(
     role: identity.role,
     prompt: spec.prompt,
     templateId: spec.templateId,
+    providerId: env.providerId,
+    model: env.model,
+    modelFallbackReason: env.modelFallbackReason,
     mode: spec.mode,
     applyPolicy: spec.mode === "worktree" ? spec.applyPolicy : undefined,
     allowedOutputPaths: spec.allowedOutputPaths.length > 0 ? spec.allowedOutputPaths : undefined,

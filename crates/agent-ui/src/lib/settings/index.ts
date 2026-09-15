@@ -121,6 +121,7 @@ import {
   COMMAND_SAFETY_MODES,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
   getDefaultUsageQueryConfig,
+  MAX_SUBAGENT_ROLES,
   MODEL_INPUT_MODALITIES,
   PROMPT_CACHE_HINT_MODES,
   PROVIDER_RETRY_MAX_RETRIES_LIMITS,
@@ -1169,13 +1170,25 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
 
 export function normalizeAgentPromptTemplate(input: unknown): AgentPromptTemplate {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const enabled = obj.enabled === true;
+  const selectedModel = normalizeSelectedModel(obj.selectedModel);
 
   return {
     id: typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : createUuid(),
     name: typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : "未命名模板",
     description: normalizeOptionalText(obj.description),
     prompt: normalizeOptionalText(obj.prompt),
-    enabled: obj.enabled === true,
+    enabled,
+    // Legacy templates used enabled for both the parent global prompt and the
+    // Agent-tool template list. Preserve that behavior until the first save
+    // writes the independent role flag explicitly.
+    subagentEnabled: Object.hasOwn(obj, "subagentEnabled") ? obj.subagentEnabled === true : enabled,
+    ...(selectedModel ? { selectedModel } : {}),
+    ...(typeof obj.thinkingEnabled === "boolean" ? { thinkingEnabled: obj.thinkingEnabled } : {}),
+    ...(typeof obj.reasoning === "string" &&
+    (REASONING_LEVELS as readonly string[]).includes(obj.reasoning)
+      ? { reasoning: obj.reasoning as ReasoningLevel }
+      : {}),
   };
 }
 
@@ -1501,11 +1514,20 @@ export function normalizeMcpSettings(input: unknown): McpSettings {
 export function normalizeAgentPromptTemplates(input: unknown): AgentPromptTemplate[] {
   if (!Array.isArray(input)) return [];
   let hasEnabled = false;
+  let enabledRoleCount = 0;
   return input.map((template) => {
-    const normalized = normalizeAgentPromptTemplate(template);
-    if (!normalized.enabled) return normalized;
-    if (hasEnabled) return { ...normalized, enabled: false };
-    hasEnabled = true;
+    let normalized = normalizeAgentPromptTemplate(template);
+    if (normalized.enabled) {
+      if (hasEnabled) normalized = { ...normalized, enabled: false };
+      else hasEnabled = true;
+    }
+    if (normalized.subagentEnabled) {
+      if (enabledRoleCount >= MAX_SUBAGENT_ROLES) {
+        normalized = { ...normalized, subagentEnabled: false };
+      } else {
+        enabledRoleCount += 1;
+      }
+    }
     return normalized;
   });
 }

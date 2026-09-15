@@ -1013,6 +1013,9 @@ export function ToolResultDisplay({
     if (agent.mode === "worktree") {
       tags.push({ label: "mode", value: agent.mode });
     }
+    if (agent.model) {
+      tags.push({ label: "model", value: agent.model });
+    }
     if (shouldShowSubagentApplyStatus(agent) && agent.applyStatus) {
       tags.push({ label: "apply", value: agent.applyStatus });
     }
@@ -1040,6 +1043,9 @@ export function ToolResultDisplay({
             <div className="text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-[1.55] text-foreground/78">
               <span className="text-muted-foreground">role</span> {agent.role}
             </div>
+          ) : null}
+          {agent.modelFallbackReason ? (
+            <CodePreview text={agent.modelFallbackReason} maxChars={600} />
           ) : null}
           {agentTask ? (
             <div className="break-words text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-[1.6] text-foreground/80">

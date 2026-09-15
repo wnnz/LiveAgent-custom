@@ -73,6 +73,9 @@ export function buildTemplateEntries(templates: SubagentTemplate[]): SubagentTem
     id: template.id,
     name: template.name,
     description: template.description || undefined,
+    model: template.selectedModel
+      ? `${template.selectedModel.customProviderId}/${template.selectedModel.model}`
+      : "inherit-parent",
   }));
 }
 
@@ -98,7 +101,7 @@ export function formatTemplates(entries: SubagentTemplateEntry[]) {
     .slice(0, MAX_LISTED_AGENTS)
     .map((entry) => {
       const description = entry.description ? ` - ${entry.description}` : "";
-      return `${entry.id} (${entry.name})${description}`;
+      return `${entry.id} (${entry.name}) [model=${entry.model ?? "inherit-parent"}]${description}`;
     })
     .join("\n");
 }

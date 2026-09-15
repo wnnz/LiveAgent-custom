@@ -1,5 +1,6 @@
 import {
   type AgentPromptTemplate,
+  MAX_SUBAGENT_ROLES,
   resolveEffectivePromptSettings,
   updateAgents,
   updateWorkspacePromptSettings,
@@ -100,8 +101,23 @@ export function AgentsSection(props: SettingsSectionProps) {
     );
   }
 
+  function handleToggleSubagentEnabled(id: string) {
+    setSettings((prev) => {
+      const activeRoles = prev.agents.filter((template) => template.subagentEnabled).length;
+      return updateAgents(
+        prev,
+        prev.agents.map((template) =>
+          template.id === id && (template.subagentEnabled || activeRoles < MAX_SUBAGENT_ROLES)
+            ? { ...template, subagentEnabled: !template.subagentEnabled }
+            : template,
+        ),
+      );
+    });
+  }
+
   const templates = settings.agents;
   const enabledCount = templates.filter((template) => template.enabled).length;
+  const enabledRoleCount = templates.filter((template) => template.subagentEnabled).length;
   const projects = settings.system.workspaceProjects;
   const configuredProjectCount = projects.filter((project) => {
     const entry = settings.system.workspaceResourceSettings[workspaceProjectPathKey(project.path)];
@@ -188,6 +204,14 @@ export function AgentsSection(props: SettingsSectionProps) {
           ) : (
             <div className="space-y-2">
               {templates.map((template) => {
+                const roleProvider = template.selectedModel
+                  ? settings.customProviders.find(
+                      (provider) => provider.id === template.selectedModel?.customProviderId,
+                    )
+                  : undefined;
+                const roleModelAvailable = template.selectedModel
+                  ? Boolean(roleProvider?.activeModels.includes(template.selectedModel.model))
+                  : true;
                 return (
                   <div
                     key={template.id}
@@ -216,6 +240,11 @@ export function AgentsSection(props: SettingsSectionProps) {
                               {t("settings.agentsGlobalDefault")}
                             </span>
                           ) : null}
+                          {template.subagentEnabled ? (
+                            <span className="shrink-0 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-violet-600 dark:text-violet-400">
+                              {t("settings.agentsRoleBadge")}
+                            </span>
+                          ) : null}
                         </div>
                         {template.description ? (
                           <p
@@ -225,13 +254,46 @@ export function AgentsSection(props: SettingsSectionProps) {
                             {template.description}
                           </p>
                         ) : null}
+                        {template.subagentEnabled ? (
+                          <p
+                            className={cn(
+                              "mt-1 truncate text-[11px]",
+                              roleModelAvailable ? "text-muted-foreground" : "text-amber-600",
+                            )}
+                          >
+                            {template.selectedModel
+                              ? `${roleProvider?.name ?? template.selectedModel.customProviderId} · ${template.selectedModel.model}`
+                              : t("settings.agentsRoleFollowParent")}
+                            {!roleModelAvailable
+                              ? ` · ${t("settings.agentsRoleFallbackParent")}`
+                              : ""}
+                          </p>
+                        ) : null}
                       </div>
 
                       <div className="settings-card-actions flex items-center gap-1.5">
+                        <span className="text-[10px] text-muted-foreground">
+                          {t("settings.agentsGlobalShort")}
+                        </span>
                         <AgentActivationSwitch
                           checked={template.enabled}
                           title={template.enabled ? t("settings.disable") : t("settings.enable")}
                           onToggle={() => handleToggleEnabled(template.id)}
+                        />
+                        <span className="ml-1 text-[10px] text-muted-foreground">
+                          {t("settings.agentsRoleShort")}
+                        </span>
+                        <AgentActivationSwitch
+                          checked={template.subagentEnabled}
+                          disabled={
+                            !template.subagentEnabled && enabledRoleCount >= MAX_SUBAGENT_ROLES
+                          }
+                          title={
+                            !template.subagentEnabled && enabledRoleCount >= MAX_SUBAGENT_ROLES
+                              ? t("settings.agentsRoleLimit")
+                              : t("settings.agentsRoleEnabled")
+                          }
+                          onToggle={() => handleToggleSubagentEnabled(template.id)}
                         />
                         <div className="settings-hover-actions ml-1 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                           <Button
@@ -404,6 +466,7 @@ export function AgentsSection(props: SettingsSectionProps) {
           initialData={editingTemplate ?? undefined}
           onSave={handleSave}
           onClose={closeModal}
+          providers={settings.customProviders}
         />
       ) : null}
 
@@ -421,6 +484,7 @@ export function AgentsSection(props: SettingsSectionProps) {
             description: viewingProject.path,
             prompt: viewingProjectPromptSettings.prompt,
             enabled: true,
+            subagentEnabled: false,
           }}
           subtitle={t("chat.projectPromptTitle")}
           hidePromptHeader

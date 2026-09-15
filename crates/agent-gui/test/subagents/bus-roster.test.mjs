@@ -163,10 +163,15 @@ test("formatRoster and formatTemplates render bounded description blocks", () =>
   assert.equal(roster.formatTemplates([]), "No enabled AGENTS templates are available.");
   assert.equal(
     roster.formatTemplates([
-      { id: "reviewer", name: "Reviewer", description: "Review code" },
+      {
+        id: "reviewer",
+        name: "Reviewer",
+        description: "Review code",
+        model: "provider-a/review-model",
+      },
       { id: "bare", name: "Bare" },
     ]),
-    "reviewer (Reviewer) - Review code\nbare (Bare)",
+    "reviewer (Reviewer) [model=provider-a/review-model] - Review code\nbare (Bare) [model=inherit-parent]",
   );
 });
 

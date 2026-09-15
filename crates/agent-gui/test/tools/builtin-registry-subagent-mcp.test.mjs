@@ -254,7 +254,10 @@ test("Agent tool description embeds the hydrated roster and enabled templates", 
     agentTool.description,
     /id=historian name=Historian role=History research mode=readonly status=completed summary=Era catalogued\./,
   );
-  assert.match(agentTool.description, /reviewer \(Reviewer\) - Review code paths/);
+  assert.match(
+    agentTool.description,
+    /reviewer \(Reviewer\) \[model=inherit-parent\] - Review code paths/,
+  );
 });
 
 test("worktree children get fs/shell/ro-memory/MCP tools but no skills, system, or manager tools", async () => {

@@ -522,6 +522,58 @@ test("template prompt and metadata are injected into the system prompt", async (
   assert.equal(result.details.agents[0].name, "Reviewer");
   assert.equal(result.details.agents[0].role, "Review code paths");
   assert.equal(result.details.agents[0].templateId, "reviewer");
+
+  const resumed = await harness.bundle.executeToolCall(
+    createAgentToolCall({ agents: [{ id: "templated", prompt: "review the tests" }] }),
+  );
+  assert.equal(resumed.isError, false);
+  assert.match(
+    harness.runnerCalls[1].context.systemPrompt,
+    /Configured template instructions:\nFocus on concrete defects\./,
+  );
+});
+
+test("each selected role can resolve a different model runtime", async () => {
+  const harness = await createSubagentHarness({
+    templates: [
+      { id: "reviewer", name: "Reviewer", description: "Review", prompt: "Review carefully" },
+      { id: "planner", name: "Planner", description: "Plan", prompt: "Plan carefully" },
+    ],
+    resolveRuntime: (template) => ({
+      providerId: template?.id === "reviewer" ? "codex" : "claude_code",
+      model: template?.id === "reviewer" ? "gpt-review" : "claude-plan",
+      runtime: {
+        baseUrl: `https://${template?.id}.example.test`,
+        apiKey: "role-key",
+        reasoning: template?.id === "reviewer" ? "high" : "low",
+      },
+    }),
+  });
+  const result = await harness.bundle.executeToolCall(
+    createAgentToolCall({
+      agents: [
+        { id: "review", prompt: "review", template: "reviewer" },
+        { id: "plan", prompt: "plan", template: "planner" },
+      ],
+      concurrency: 2,
+    }),
+  );
+
+  assert.equal(result.isError, false);
+  assert.deepEqual(
+    harness.runnerCalls.map((call) => [call.providerId, call.model, call.runtime.reasoning]).sort(),
+    [
+      ["claude_code", "claude-plan", "low"],
+      ["codex", "gpt-review", "high"],
+    ],
+  );
+  assert.deepEqual(
+    result.details.agents.map((agent) => [agent.providerId, agent.model]).sort(),
+    [
+      ["claude_code", "claude-plan"],
+      ["codex", "gpt-review"],
+    ],
+  );
 });
 
 test("unknown template rejects the batch before any agent starts", async () => {

@@ -54,6 +54,11 @@ pub(crate) fn initialize_schema(conn: &Connection) -> Result<(), String> {
             sort_index INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS subagent_role_profiles (
+            template_id TEXT PRIMARY KEY,
+            payload_json TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS ssh_settings (
             host_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,

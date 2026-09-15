@@ -1,6 +1,13 @@
-import type { AgentPromptTemplate } from "@liveagent/app/lib/settings";
+import {
+  type AgentPromptTemplate,
+  type CustomProvider,
+  getChatRuntimeReasoningLevelsForProvider,
+  type ReasoningLevel,
+} from "@liveagent/app/lib/settings";
 import { BookOpen, Check, FileText, ScrollText } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
+import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { useState } from "react";
 import { Button } from "../../components/ui/button";
 import {
@@ -15,24 +22,69 @@ import {
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
+import { Switch } from "../../components/ui/switch";
 import { Textarea } from "../../components/ui/textarea";
+import { ModelPicker } from "./modelPicker";
 
 type AgentPromptTemplateModalProps = {
   initialData?: AgentPromptTemplate;
   onSave: (data: Omit<AgentPromptTemplate, "id" | "enabled">) => void;
   onClose: () => void;
+  providers: CustomProvider[];
 };
 
 export function AgentPromptTemplateModal({
   initialData,
   onSave,
   onClose,
+  providers,
 }: AgentPromptTemplateModalProps) {
   const { t } = useLocale();
   const [name, setName] = useState(initialData?.name ?? "");
   const [description, setDescription] = useState(initialData?.description ?? "");
   const [prompt, setPrompt] = useState(initialData?.prompt ?? "");
+  const [subagentEnabled, setSubagentEnabled] = useState(initialData?.subagentEnabled ?? false);
+  const [selectedModel, setSelectedModel] = useState(initialData?.selectedModel);
+  const [thinkingEnabled, setThinkingEnabled] = useState(initialData?.thinkingEnabled ?? true);
+  const [reasoning, setReasoning] = useState<ReasoningLevel>(initialData?.reasoning ?? "medium");
   const isEditing = Boolean(initialData);
+  const availableModelOptions = buildModelOptions({ customProviders: providers }).map((option) => ({
+    ...option,
+    description: option.providerName,
+  }));
+  const selectedModelValue = selectedModel
+    ? toModelValue(selectedModel.customProviderId, selectedModel.model)
+    : "";
+  const modelOptions =
+    selectedModel && !availableModelOptions.some((option) => option.value === selectedModelValue)
+      ? [
+          {
+            value: selectedModelValue,
+            label: selectedModel.model,
+            description: t("settings.agentsRoleModelUnavailable"),
+            providerName: t("settings.agentsRoleModelUnavailable"),
+            providerId: selectedModel.customProviderId,
+          },
+          ...availableModelOptions,
+        ]
+      : availableModelOptions;
+  const selectedProvider = selectedModel
+    ? providers.find((provider) => provider.id === selectedModel.customProviderId)
+    : undefined;
+  const reasoningLevels = selectedProvider
+    ? getChatRuntimeReasoningLevelsForProvider({
+        providerId: selectedProvider.type,
+        requestFormat: selectedProvider.requestFormat,
+        modelId: selectedModel?.model,
+      })
+    : (["minimal", "low", "medium", "high", "xhigh", "max"] as const);
 
   function handleSave() {
     const trimmedName = name.trim();
@@ -43,6 +95,10 @@ export function AgentPromptTemplateModal({
       name: trimmedName,
       description: description.trim(),
       prompt: trimmedPrompt,
+      subagentEnabled,
+      ...(selectedModel ? { selectedModel } : {}),
+      thinkingEnabled,
+      reasoning,
     });
     onClose();
   }
@@ -108,6 +164,68 @@ export function AgentPromptTemplateModal({
                   className="h-32 min-h-32 flex-1 resize-none overflow-y-auto overscroll-contain px-3.5 py-3 leading-relaxed md:h-auto md:min-h-0"
                   onChange={(e) => setDescription(e.currentTarget.value)}
                 />
+              </div>
+
+              <div className="mt-5 space-y-4 border-t border-border/60 pt-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label className="text-xs font-semibold">
+                      {t("settings.agentsRoleEnabled")}
+                    </Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t("settings.agentsRoleEnabledHint")}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={subagentEnabled}
+                    onCheckedChange={(checked) => setSubagentEnabled(checked === true)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">{t("settings.agentsRoleModel")}</Label>
+                  <ModelPicker
+                    options={modelOptions}
+                    value={selectedModelValue}
+                    onChange={(value) =>
+                      setSelectedModel(value ? (parseModelValue(value) ?? undefined) : undefined)
+                    }
+                    placeholder={t("settings.agentsRoleFollowParent")}
+                    noneLabel={t("settings.agentsRoleFollowParent")}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-xs font-semibold">
+                    {t("settings.agentsRoleThinking")}
+                  </Label>
+                  <Switch
+                    checked={thinkingEnabled}
+                    onCheckedChange={(checked) => setThinkingEnabled(checked === true)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">
+                    {t("settings.agentsRoleReasoning")}
+                  </Label>
+                  <Select
+                    value={reasoning}
+                    disabled={!thinkingEnabled || reasoningLevels.length === 0}
+                    onValueChange={(value) => setReasoning(value as ReasoningLevel)}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue>{reasoning}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {reasoningLevels.map((level) => (
+                        <SelectItem key={level} value={level}>
+                          {level}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </section>
 

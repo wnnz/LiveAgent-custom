@@ -469,6 +469,7 @@ export async function buildBuiltinToolRegistry(
         // 仅供 worktree apply 在合并回父工作区前捕获前像(blocker-2),
         // 不进入子代理自身的工具注册表(见下方 checkpoint: undefined)。
         checkpoint: params.checkpoint,
+        resolveRuntime: subagentRuntime.resolveRuntime,
         createSubagentToolRegistry: async (workdir) =>
           createBuiltinToolRegistry(
             (

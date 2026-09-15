@@ -2461,6 +2461,69 @@ test("only one agent prompt template remains enabled after normalization", () =>
   );
 });
 
+test("agent roles migrate independently and cap enabled roles at twelve", () => {
+  const legacy = settings.normalizeAgentPromptTemplate({
+    id: "legacy",
+    name: "Legacy",
+    prompt: "Legacy prompt",
+    enabled: true,
+  });
+  assert.equal(legacy.subagentEnabled, true);
+
+  const explicit = settings.normalizeAgentPromptTemplate({
+    id: "explicit",
+    name: "Explicit",
+    prompt: "Explicit prompt",
+    enabled: true,
+    subagentEnabled: false,
+    selectedModel: { customProviderId: "provider-a", model: "model-a" },
+    thinkingEnabled: false,
+    reasoning: "high",
+  });
+  assert.equal(explicit.subagentEnabled, false);
+  assert.deepEqual(explicit.selectedModel, {
+    customProviderId: "provider-a",
+    model: "model-a",
+  });
+  assert.equal(explicit.thinkingEnabled, false);
+  assert.equal(explicit.reasoning, "high");
+
+  const roles = settings.normalizeAgentPromptTemplates(
+    Array.from({ length: 14 }, (_, index) => ({
+      id: `role-${index}`,
+      name: `Role ${index}`,
+      prompt: `Prompt ${index}`,
+      enabled: false,
+      subagentEnabled: true,
+    })),
+  );
+  assert.equal(roles.filter((role) => role.subagentEnabled).length, 12);
+  assert.equal(roles[12].subagentEnabled, false);
+  assert.equal(roles[13].subagentEnabled, false);
+});
+
+test("agent role model settings round-trip through gateway settings sync", () => {
+  const source = settings.normalizeSettings({
+    agents: [
+      {
+        id: "reviewer",
+        name: "Reviewer",
+        description: "Review code",
+        prompt: "Review carefully",
+        enabled: false,
+        subagentEnabled: true,
+        selectedModel: { customProviderId: "provider-a", model: "model-a" },
+        thinkingEnabled: false,
+        reasoning: "high",
+      },
+    ],
+  });
+  const payload = sync.buildGatewaySettingsSyncPayload(source);
+  const received = sync.applyGatewaySettingsSyncPayload(settings.normalizeSettings({}), payload);
+
+  assert.deepEqual(received.agents, source.agents);
+});
+
 test("effective prompts append or replace project prompts after the active global template", () => {
   const appSettings = settings.normalizeSettings({
     agents: [

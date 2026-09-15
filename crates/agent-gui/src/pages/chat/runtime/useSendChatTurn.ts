@@ -1709,6 +1709,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
               );
             },
             agentTemplates: settings.agents,
+            subagentProviders: settings.customProviders,
+            subagentRuntimeControls: settings.chatRuntimeControls,
             getMcpSettings: getEffectiveMcpSettings,
             getToolPolicies,
             getCuaAllowSelfTargeting: () => settings.system.cuaAllowSelfTargeting === true,

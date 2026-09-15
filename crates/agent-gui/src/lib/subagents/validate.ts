@@ -251,6 +251,9 @@ export function parseSubagentBatch(
     }
 
     const existingIdentity = id ? identitiesByKey.get(normalizeLookupKey(id)) : undefined;
+    if (!template && !templateRef && existingIdentity?.templateId) {
+      template = templateLookup.get(normalizeLookupKey(existingIdentity.templateId));
+    }
     if (existingIdentity) {
       const mismatches = conflictFields({
         identity: existingIdentity,

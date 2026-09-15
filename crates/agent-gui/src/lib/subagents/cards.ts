@@ -98,6 +98,8 @@ export function renderBatchResultText(details: SubagentBatchDetails) {
       `mode=${agent.mode}`,
       agent.applyPolicy ? `apply_policy=${agent.applyPolicy}` : "",
       agent.templateId ? `template=${agent.templateId}` : "",
+      agent.providerId && agent.model ? `model=${agent.providerId}/${agent.model}` : "",
+      agent.modelFallbackReason ? `model_fallback=${agent.modelFallbackReason}` : "",
       `duration_ms=${agent.durationMs} rounds=${agent.rounds} tool_calls=${agent.toolCalls}`,
       agent.worktreeRoot ? `worktree=${agent.worktreeRoot}` : "",
       agent.branchName ? `branch=${agent.branchName}` : "",

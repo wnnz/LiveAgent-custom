@@ -460,6 +460,7 @@ export async function createSubagentHarness(options = {}) {
         prompt: "Focus on concrete defects.",
       },
     ],
+    resolveRuntime: options.resolveRuntime,
     store,
     scheduler,
     baseTools,

@@ -20,6 +20,7 @@ const PROVIDER_SETTINGS_TABLE: &str = "provider_settings";
 const SYSTEM_SETTINGS_TABLE: &str = "system_settings";
 const MCP_SETTINGS_TABLE: &str = "mcp_settings";
 const AGENT_PROMPT_TEMPLATES_TABLE: &str = "agent_prompt_templates";
+const SUBAGENT_ROLE_PROFILES_TABLE: &str = "subagent_role_profiles";
 const SSH_SETTINGS_TABLE: &str = "ssh_settings";
 const SSH_PROJECT_HOST_ASSOCIATIONS_TABLE: &str = "ssh_project_host_associations";
 const SSH_KNOWN_HOSTS_TABLE: &str = "ssh_known_hosts";
@@ -114,6 +115,15 @@ const AGENT_PROMPT_TEMPLATES_INSERT_SQL: &str = "
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
 ";
 const AGENT_PROMPT_TEMPLATES_DELETE_SQL: &str = "DELETE FROM agent_prompt_templates";
+const SUBAGENT_ROLE_PROFILES_SELECT_SQL: &str = "
+    SELECT template_id, payload_json
+    FROM subagent_role_profiles
+";
+const SUBAGENT_ROLE_PROFILES_INSERT_SQL: &str = "
+    INSERT INTO subagent_role_profiles (template_id, payload_json, updated_at)
+    VALUES (?1, ?2, ?3)
+";
+const SUBAGENT_ROLE_PROFILES_DELETE_SQL: &str = "DELETE FROM subagent_role_profiles";
 
 const SSH_SETTINGS_SELECT_SQL: &str = "
     SELECT

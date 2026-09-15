@@ -1,4 +1,5 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ReasoningLevel, SelectedModel } from "../settings";
 
 export const AGENT_TOOL_NAME = "Agent";
 export const SEND_MESSAGE_TOOL_NAME = "SendMessage";
@@ -44,6 +45,9 @@ export type SubagentTemplate = {
   name: string;
   description: string;
   prompt: string;
+  selectedModel?: SelectedModel;
+  thinkingEnabled?: boolean;
+  reasoning?: ReasoningLevel;
 };
 
 export type SubagentIdentity = {

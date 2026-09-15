@@ -71,6 +71,7 @@ import {
   selectEnabledMcpServers,
   workspaceProjectPathKey,
 } from "../../../lib/settings";
+import { resolveSubagentRoleRuntime } from "../../../lib/subagentRoles/runtime";
 import {
   AGENT_TOOL_NAME,
   buildRosterIdentitySection,
@@ -222,12 +223,15 @@ function finishAgentPerfSpan(
 // Only enabled, non-empty templates are resolvable from Agent calls.
 function enabledSubagentTemplates(agentTemplates: AppSettings["agents"]): SubagentTemplate[] {
   return (agentTemplates ?? [])
-    .filter((template) => template.enabled && template.prompt.trim())
+    .filter((template) => template.subagentEnabled && template.prompt.trim())
     .map((template) => ({
       id: template.id,
       name: template.name,
       description: template.description,
       prompt: template.prompt,
+      selectedModel: template.selectedModel,
+      thinkingEnabled: template.thinkingEnabled,
+      reasoning: template.reasoning,
     }));
 }
 
@@ -300,6 +304,8 @@ export type RunAgentConversationTurnParams = {
     baseDirs: string[];
   }) => void | Promise<void>;
   agentTemplates: AppSettings["agents"];
+  subagentProviders: AppSettings["customProviders"];
+  subagentRuntimeControls: AppSettings["chatRuntimeControls"];
   getMcpSettings: () => AppSettings["mcp"];
   /** 工具审批策略的实时读取(权威 settingsRef,非 turn 级快照),缺省视为空表。 */
   getToolPolicies?: () => AppSettings["system"]["toolPolicies"];
@@ -396,6 +402,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     skillAccessPolicy,
     onManagedSkillsChanged,
     agentTemplates,
+    subagentProviders,
+    subagentRuntimeControls,
     getMcpSettings,
     getToolPolicies,
     getCuaAllowSelfTargeting,
@@ -669,6 +677,16 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           templates: enabledSubagentTemplates(agentTemplates),
           store: subagentStore,
           scheduler: subagentScheduler,
+          resolveRuntime: (template) =>
+            resolveSubagentRoleRuntime({
+              template,
+              providers: subagentProviders,
+              controls: subagentRuntimeControls,
+              parent: { providerId, model, runtime },
+              parentProvider: subagentProviders.find(
+                (provider) => provider.id === selectedModel.customProviderId,
+              ),
+            }),
         }
       : undefined,
   });

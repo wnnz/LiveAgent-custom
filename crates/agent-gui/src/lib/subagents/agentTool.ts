@@ -188,6 +188,12 @@ export type SubagentRuntimeConfig = {
   templates: SubagentTemplate[];
   store: SubagentConversationStore;
   scheduler: SubagentScheduler;
+  resolveRuntime?: (template?: SubagentTemplate) => {
+    providerId: ProviderId;
+    model: string;
+    runtime: ProviderRuntimeConfig;
+    fallbackReason?: string;
+  };
 };
 
 export function createSubagentTools(params: {
@@ -212,6 +218,7 @@ export function createSubagentTools(params: {
   checkpoint?: { conversationId: string; turnId: string };
   /** Plan mode:一切子代理强制 readonly,worktree 请求按参数错误拒绝。 */
   forceReadonly?: boolean;
+  resolveRuntime?: SubagentRuntimeConfig["resolveRuntime"];
 }): BuiltinToolBundle {
   const store = params.store;
   const templates = params.templates;
@@ -258,6 +265,7 @@ export function createSubagentTools(params: {
       "Subagents cannot call Agent recursively. Worktree mode must not modify global LiveAgent settings, MCP server configuration, cron tasks, or user-level skills.",
       "Subagents communicate through SendMessage (to=parent is parent-private; to=* is a shared broadcast); do not use workspace files as a message channel.",
       "Include the new user request and any parent-conversation context each subagent needs in that agent's prompt. The parent conversation is not copied automatically.",
+      "Prefer the enabled template whose name and description best match each new delegated job. Omit template only when no configured role is suitable.",
       "Invalid calls start no agents and return a structured error listing the roster and enabled templates — fix every issue and retry with one corrected call.",
       "Existing agents that may be resumed by id:",
       formatRoster(rosterEntries),
@@ -322,7 +330,7 @@ export function createSubagentTools(params: {
     const scheduler = context?.subagentScheduler ?? params.scheduler;
     const startedAt = Date.now();
 
-    const env: SubagentRunEnvironment = {
+    const baseEnv: SubagentRunEnvironment = {
       providerId: params.providerId,
       model: params.model,
       runtime: params.runtime,
@@ -369,6 +377,10 @@ export function createSubagentTools(params: {
       agents,
       concurrency,
       async (resolved, index): Promise<SubagentReportDetails> => {
+        const selectedRuntime = params.resolveRuntime?.(resolved.template);
+        const env: SubagentRunEnvironment = selectedRuntime
+          ? { ...baseEnv, ...selectedRuntime, modelFallbackReason: selectedRuntime.fallbackReason }
+          : baseEnv;
         const identityPreview =
           resolved.existingIdentity ??
           createSubagentIdentity({
@@ -441,6 +453,9 @@ export function createSubagentTools(params: {
             error: cancelled
               ? "Cancelled"
               : normalizeErrorMessage(error, "Delegated subagent failed"),
+            providerId: env.providerId,
+            model: env.model,
+            modelFallbackReason: env.modelFallbackReason,
           });
         }
       },

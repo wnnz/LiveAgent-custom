@@ -79,6 +79,40 @@ test("hosted search activity keeps one group identity as later searches append",
   assert.equal(appended[0].key, first[0].key);
 });
 
+test("reasoning emitted in the middle of one sentence renders before joined prose", () => {
+  const grouped = groupRoundBlocks([
+    { kind: "text", id: "text-1", text: "PR" },
+    { kind: "thinking", id: "thinking-1", text: "check the production procedure" },
+    { kind: "text", id: "text-2", text: "D 中的新 SP 不存在。" },
+    {
+      kind: "tool",
+      item: {
+        toolCall: { type: "toolCall", id: "call-1", name: "Bash", arguments: {} },
+      },
+    },
+  ]);
+
+  assert.deepEqual(
+    grouped.map((block) => block.kind),
+    ["thinking", "text", "toolGroup"],
+  );
+  assert.equal(grouped[1].text, "PRD 中的新 SP 不存在。");
+  assert.equal(grouped[1].key, "text-1");
+});
+
+test("reasoning after completed prose remains a separate later stage", () => {
+  const grouped = groupRoundBlocks([
+    { kind: "text", id: "text-1", text: "Checked production." },
+    { kind: "thinking", id: "thinking-1", text: "decide what to inspect next" },
+    { kind: "text", id: "text-2", text: "Now checking the schema." },
+  ]);
+
+  assert.deepEqual(
+    grouped.map((block) => block.kind),
+    ["text", "thinking", "text"],
+  );
+});
+
 test("task tools stay standalone so transcript filtering cannot hide ordinary tools", () => {
   const tool = (id, name) => ({
     kind: "tool",

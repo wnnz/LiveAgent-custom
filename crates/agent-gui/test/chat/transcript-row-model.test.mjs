@@ -745,8 +745,9 @@ test("one live activity is pinned while its completed prefix units keep stable k
   assert.equal(workUnits.length, 1);
   assert.deepEqual(
     workUnits[0].unit.entries.map((entry) => entry.block.kind),
-    ["text", "thinking", "text"],
+    ["thinking", "text"],
   );
+  assert.equal(workUnits[0].unit.entries[1].block.text, "prefixstreaming tail");
   assert.equal(workUnits[0].mutable, true);
   assert.equal(answerUnits.length, 0);
   const activity = snapshot.rows.find((row) => row.kind === "assistant-activity");

@@ -792,13 +792,74 @@ export function getToolDisplayTitle(toolCall: {
   return { name, action };
 }
 
+/**
+ * Some OpenAI-compatible Responses endpoints can surface a reasoning summary
+ * after they have already opened an output-text item, then resume that same
+ * sentence in a new text item. Rendering the wire order literally produces
+ * broken prose such as `PR` -> reasoning -> `D ...`.
+ *
+ * Tools and hosted searches are hard timeline boundaries. Inside each plain
+ * text/reasoning span, however, reasoning is preparatory work: keep it before
+ * the user-facing prose and join the text fragments back into one block.
+ */
+function normalizeInterleavedReasoning(blocks: UiRound["blocks"]): UiRound["blocks"] {
+  const normalized: UiRound["blocks"] = [];
+  let span: UiRound["blocks"] = [];
+
+  const flushSpan = () => {
+    if (span.length === 0) return;
+    let sawText = false;
+    const splitThinkingIndex = span.findIndex((block) => {
+      if (block.kind === "text") sawText = true;
+      return block.kind === "thinking" && sawText;
+    });
+    const leadingText = span
+      .slice(0, splitThinkingIndex)
+      .map((block) => (block.kind === "text" ? block.text : ""))
+      .join("");
+    const interleaved =
+      splitThinkingIndex >= 0 &&
+      span.slice(splitThinkingIndex + 1).some((block) => block.kind === "text") &&
+      !/[.!?。！？…]\s*$/.test(leadingText);
+    if (!interleaved) {
+      normalized.push(...span);
+      span = [];
+      return;
+    }
+
+    const thinking = span.filter((block) => block.kind === "thinking");
+    const text = span.filter((block) => block.kind === "text");
+    normalized.push(...thinking);
+    const firstText = text[0];
+    if (firstText?.kind === "text") {
+      normalized.push({
+        ...firstText,
+        text: text.map((block) => (block.kind === "text" ? block.text : "")).join(""),
+      });
+    }
+    span = [];
+  };
+
+  for (const block of blocks) {
+    if (block.kind === "text" || block.kind === "thinking") {
+      span.push(block);
+      continue;
+    }
+    flushSpan();
+    normalized.push(block);
+  }
+  flushSpan();
+  return normalized;
+}
+
 export function groupRoundBlocks(blocks: UiRound["blocks"]): GroupedRoundBlock[] {
   const groupedBlocks: GroupedRoundBlock[] = [];
   let pendingTools: ToolTraceItem[] = [];
   let pendingStartIndex = 0;
   let pendingSearches: HostedSearchBlock[] = [];
   let pendingSearchStartIndex = 0;
-  const hasHostedSearch = blocks.some((block) => block.kind === "hostedSearch");
+  const normalizedBlocks = normalizeInterleavedReasoning(blocks);
+  const hasHostedSearch = normalizedBlocks.some((block) => block.kind === "hostedSearch");
 
   const flushPendingTools = () => {
     if (pendingTools.length === 0) return;
@@ -824,7 +885,7 @@ export function groupRoundBlocks(blocks: UiRound["blocks"]): GroupedRoundBlock[]
     pendingSearches = [];
   };
 
-  blocks.forEach((block, index) => {
+  normalizedBlocks.forEach((block, index) => {
     if (block.kind === "tool") {
       if (!shouldDisplayToolTraceItem(block.item, { hasHostedSearch })) {
         return;
